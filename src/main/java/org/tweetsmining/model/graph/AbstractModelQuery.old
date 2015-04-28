@@ -1,0 +1,59 @@
+/*
+ * To change this license header, choose License Headers in Project Properties.
+ * To change this template file, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package org.tweetsmining.model.graph;
+
+import java.util.SortedSet;
+import java.util.TreeSet;
+
+import org.tweetsmining.model.graph.database.ERTriple;
+import org.tweetsmining.model.graph.database.Entity;
+import org.tweetsmining.model.graph.database.Relation;
+
+/**
+ * Provides an interface to query the model contained in a MultiLayeredGraph
+ * @author gyankos
+ */
+public class AbstractModelQuery {
+    
+    public static Selector getSelector(AbstractMultiLayerGraph mlg, ERTriple e) {
+        return getSelector(mlg, e.getSource(), e.getRelation(), e.getDestination());
+    }
+    
+    public static Selector getSelector(AbstractMultiLayerGraph mlg, Entity subject, Relation predicate, Entity object) {
+        return new SimpleSelector(src,prop,dst);
+    }
+    
+     public static SortedSet<ERTriple> query(AbstractMultiLayerGraph mlg, ERTriple t) {
+         if (t==null)
+             return query(mlg,null,null,null);
+         else
+            return query(mlg, t.getSource(), t.getRelation(), t.getDestination());
+     }
+    
+    public static SortedSet<ERTriple> query(AbstractMultiLayerGraph mlg, Entity subject, Relation predicate, Entity object) {
+        
+        SortedSet<ERTriple> sert = new TreeSet<>();
+        
+        Selector s = getSelector(mlg, subject, predicate, object);
+        for (Statement x:r.toList()) {
+            Entity qs = mlg.getVertex(x.getSubject())  ;
+            Relation qr = mlg.getRelation(x.getPredicate().getURI());
+            Entity qo = mlg.getVertex((Resource)x.getObject())  ;
+            if (qs==null || qr==null || qo==null) {
+                //System.out.println("ERROR::: "+x.getSubject().toString() + " " + x.getPredicate().getURI() + " " + x.getObject().toString());
+            
+                //throw new RuntimeException("ERROR: element is null");
+                
+            } else 
+                sert.add(new ERTriple(qs,qr,qo)); 
+        }
+        
+        return sert;
+        
+    }
+    
+}

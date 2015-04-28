@@ -1,0 +1,80 @@
+package org.tweetsmining.model.graph;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.util.Collection;
+import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import org.apache.commons.collections.keyvalue.MultiKey;
+
+import org.tweetsmining.model.graph.database.ERTriple;
+import org.tweetsmining.model.graph.database.Entity;
+import org.tweetsmining.model.graph.database.Relation;
+import org.tweetsmining.model.matrices.IMatrix;
+
+
+public final class OldMultiLayerGraph  extends AbstractMultiLayerGraph {
+
+	private static final long serialVersionUID = 280449123062820576L;
+	
+	public OldMultiLayerGraph() {
+		super();
+	}
+	
+	
+	private void writeObject(ObjectOutputStream out) throws IOException {
+        out.defaultWriteObject();
+        System.out.println("~~~~~"+toString());
+        out.writeObject(toString());
+    }
+ 
+   /* private void readObject(ObjectInputStream in) throws IOException,ClassNotFoundException {
+        in.defaultReadObject();
+        Model nMod = createModel();
+        InputStream is = new ByteArrayInputStream(((String)in.readObject()).getBytes());
+        
+        //System.out.println("IS~~~~~"+new Scanner(is,"UTF-8").useDelimiter("\\A").next());
+        
+        nMod.read(is,null,AbstractMultiLayerGraph.CONVERSION_FORMAT);
+        update(nMod);
+    }*/
+    
+    public static OldMultiLayerGraph create(IMatrix m, List<String> idRows, List<String> idCols, String relUri) {
+        if (m.nRows() != idRows.size())
+            return null;
+        if (m.nCols() != idCols.size())
+            return null;
+        OldMultiLayerGraph obj = new OldMultiLayerGraph();
+        Relation r = obj.newLinkType(relUri);
+        for (MultiKey x: m.getValueRange()) {
+            String nRow = idRows.get((Long)x.getKey(0));
+            String nCol = idRows.get((Long)x.getKey(1));
+            Entity src = obj.addVertex(nRow);
+            Entity dst = obj.addVertex(nCol);
+            obj.addTriple(src, r,dst,1);
+        }
+        return obj;
+    }
+    
+    public static OldMultiLayerGraph create(Collection<ERTriple> ltriple) {
+        OldMultiLayerGraph obj = new OldMultiLayerGraph();
+        for (ERTriple x:ltriple) {
+            Entity src = obj.addVertex(x.getSource().getClassName());
+            Entity dst = obj.addVertex(x.getDestination().getClassName());
+            Relation r = obj.newLinkType(x.getRelation().getName());
+            try {
+                obj.addTriple(src, r, dst, 1);
+            } catch (Throwable ex) {
+                Logger.getLogger(AbstractMultiLayerGraph.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+        return obj;
+    }
+
+	
+
+}

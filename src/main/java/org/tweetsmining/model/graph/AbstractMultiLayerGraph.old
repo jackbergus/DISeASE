@@ -1,0 +1,532 @@
+/*
+ * To change this license header, choose License Headers in Project Properties.
+ * To change this template file, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package org.tweetsmining.model.graph;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import org.tweetsmining.model.graph.database.Entity;
+import org.tweetsmining.model.graph.database.Relation;
+import org.tweetsmining.model.graph.database.phisical.GraphDBEntityPhisicalLayer;
+import org.tweetsmining.model.matrices.IMatrix;
+
+/**
+ * This Class gives the abstraction of the OWL ABox with different layers 
+ * (IGraph-s) where each layer is formed by graphs composed by edges of
+ * the same kind of Relation
+ * 
+ * @author gyankos
+ */
+public abstract class AbstractMultiLayerGraph  implements IGraph {
+    
+    private static final long serialVersionUID = -8381179161274281628L;
+	//private HashMap<Integer,Entity> elems = new HashMap<>();
+    private HashMap<String,PropertyGraph> layers = new HashMap<>();
+    //private Model mod;
+    public static final String CONVERSION_FORMAT = "Turtle";
+    
+    
+    /**
+     * Defines the overall Ontology model
+     */
+    public AbstractMultiLayerGraph() {
+    }
+
+    @Override
+    public void clear() {
+        for (String x:layers.keySet()) {
+            getLayer(x).clear();
+        }
+    }
+    
+    private GraphDBEntityPhisicalLayer gdb =GraphDBEntityPhisicalLayer.getInstance();
+    
+    /**************************************************************************/
+    /**************************************************************************/
+    /**************************************************************************/
+    
+    /**
+     * Returns a new Entity with the coordinates
+     * @param <K> Type extending the Entity
+     * @param clazz Entity Class
+     * @param argz Arguments for the init
+     * @return 
+     */
+    public <K extends Entity> K addVertex(Class<K> clazz, Object... argz) {
+        return (K)gdb.createNewEntity(clazz, argz);
+    }
+    
+    /**
+     * Returns the Entity defined by the assigned URI
+     * @param fullUri  URI that defines the Entity
+     * @return 
+     */
+    @Override
+    public Entity getVertex(long id) {
+        return gdb.getEntity(id);
+    }
+    
+    public int getNVertices() {
+        return gdb.getIds().size();
+    }
+    
+     /**
+     * Remove the given Vertex from all the layers, and hence it removes all
+     * the incoming edges and all the outgoing edges from and to it.
+     * 
+     * @param name Vertex Full URI
+     */
+    @Override
+    public void removeVertex(Entity name) {
+        for (String x:layers.keySet()) { 
+            getLayer(x).removeVertex(name);
+        }
+        name.remove();
+    }
+    
+    /**
+     * Returns the set of all the vertices
+     * @return 
+     */
+    public Set<Long> getVerticesId() {
+        return gdb.getIds();
+    }
+    
+    public Collection<Entity> getVertices() {
+        return gdb.getEntities();
+    }
+    
+    
+        
+    /**
+     * Returns the set of the Entities that are reachable from subject
+     * @param subject       Triple's subject (source)
+     * @param predicate     Triple's predicate (link type/Layers)
+     * @return 
+     */
+    public LinkedList<Entity> getOutSet(Entity subject, Relation predicate) {      
+        if (subject == null)
+            return new LinkedList<>(); //ERROR
+        
+        LinkedList<Entity> taonta = new LinkedList<>();
+        Collection<Relation> rl;
+        if (predicate ==null)
+            rl = getRelations();
+        else {
+            rl = new LinkedList<>();
+            rl.add(predicate);
+        }
+        
+        for (Relation pred:rl) {
+            Selector s = new SimpleSelector(subject.toResource(mod),pred.getProperty(),(RDFNode)null);
+            StmtIterator r= mod.listStatements(s);
+        
+            for (Statement x:r.toList()) {
+                Resource res = (Resource)x.getObject();
+                if (res.getURI()!=null) {
+                    Entity elem = getVertex(res.getURI());
+                if (elem!=null)
+                    taonta.add(elem);
+                }
+            }
+        }
+        
+        return taonta;
+    }
+    
+    /**
+     * Returns the set of the Entities that reach the Object
+     * @param object        Triple's object (destination)
+     * @param predicate     Triple's predicate (link type/Layers)
+     * @return 
+     */
+    public LinkedList<Entity> getInSet(Entity object, Relation predicate) {
+        if (object == null)
+            return new LinkedList<>(); //ERROR
+        
+        LinkedList<Entity> taonta = new LinkedList<>();
+        Collection<Relation> rl;
+        if (predicate ==null)
+            rl = getRelations();
+        else {
+            rl = new LinkedList<>();
+            rl.add(predicate);
+        }
+        
+        for (Relation pred:rl) {
+            Selector s = new SimpleSelector(null,pred.getProperty(),object.toResource(mod));
+            StmtIterator r= mod.listStatements(s);
+            for (Statement x:r.toList()) {
+                Resource res = x.getSubject();
+                if (res.getURI()!=null) {
+                    Entity elem = getVertex(res.getURI());
+                if (elem!=null)
+                    taonta.add(elem);
+                }
+
+            }
+        }
+        return taonta;
+    }
+    
+    private void setNamespaceFromURI(String fullUri) throws MalformedURLException {
+    	URL u = new URL(fullUri);
+		mod.setNsPrefix( u.getHost().replaceAll("\\.", ""), fullUri.replaceAll(u.getRef(), "") );
+    }
+    
+    
+    /**************************************************************************/
+    /**************************************************************************/
+    /**************************************************************************/
+    
+    /**
+     * Creates a new kind Relation, and hence a new layer
+     * @param fullUri   New Properties' URI
+     * @return 
+     */
+    public  Relation newLinkType(String fullUri) {
+        Relation rela;
+        if (fullUri==null)
+            return null;
+        if (!layers.containsKey(fullUri)) {
+            Property prop;
+            try {
+            	setNamespaceFromURI(fullUri);
+			} catch (MalformedURLException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+				return null;
+			}
+            prop = mod.createProperty(fullUri);
+            rela = new Relation(fullUri,prop);
+            layers.put(fullUri, rela);
+        } else
+            rela = layers.get(fullUri);
+        return rela;
+    }
+    
+    /**
+     * Creates a new Layer by defining the URI of the new Relations that will lay on it
+     * @param fullUri   Properties' URI that will be used on the new Layer
+     * @return 
+     */
+    public IAdjacencyGraph<Entity> newLayer(String fullUri) {
+        if (fullUri==null)
+            return null;
+        IAdjacencyGraph<Entity> g = getLayer(fullUri);
+        if (g == null){
+            newLinkType(fullUri);
+            g = getLayer(fullUri);
+        }
+        return g;
+    }
+    
+    /**
+     * Creates a new Layer
+     * @param fullUri   Properties' URI that will be used on the new Layer
+     * @param val       Matrix of previous assertions
+     * @return b
+     */
+    public IAdjacencyGraph<Entity> newLayer(String fullUri, IMatrix val) {
+        IAdjacencyGraph<Entity> g;
+        if (val==null) {
+            if (fullUri == null)
+                g = null;
+            else 
+                g = newLayer(fullUri);
+        } else {
+            g = getLayer(fullUri);
+            if (g == null){
+                Relation n = newLinkType(fullUri);
+                PropertyGraph pg = new PropertyGraph(fullUri,this,val);
+                g= (IAdjacencyGraph<Entity>)pg;
+            }
+        }
+        return g;
+    }
+    
+    /**
+     * Provides the Relation from its full URI
+     * @param name
+     * @return 
+     */
+    public Relation getRelation(String name) {
+        if (name == null)
+            return null;
+        if (layers.containsKey(name))
+            return layers.get(name);
+        else {
+            //Empty Relation
+            Property p = ResourceFactory.createProperty(name);
+            return new Relation(name,p);
+        }
+    }
+    
+    
+    
+    /**
+     * Returns the graph that represents the layer with the given name
+     * @param name
+     * @return 
+     */
+    public PropertyGraph getPropertyGraph(String name) {
+        if (name==null)
+            return null;
+        return new PropertyGraph(name,this);
+    }
+    
+    public PropertyGraph getPropertyGraph(Relation rel) {
+         return getPropertyGraph(rel.getProperty().getURI());
+    }
+    
+    public IAdjacencyGraph<Entity> getLayer(String name) {
+        return getPropertyGraph(name);
+    }
+    
+    public IMatrix getMatrix(String name) {
+        return getPropertyGraph(name);
+    }
+    
+    public IAdjacencyGraph<Entity> getLayer(Relation rel) {
+        return getLayer(rel.getProperty().getURI());
+    }
+    
+    public IMatrix getMatrix(Relation rel) {
+        return getMatrix(rel.getProperty().getURI());
+    }
+    
+    
+    
+    /**
+     * Returns all the Layers' URIs
+     * @return 
+     */
+    public Set<String> getLayerURIs() {
+        return layers.keySet();
+    }
+    
+    public Collection<Relation> getRelations() {
+        return layers.values();
+    }
+    
+    public Set<IAdjacencyGraph<Entity>> getLayers() {
+        Set<IAdjacencyGraph<Entity>> lls = new HashSet<>();
+        for (Relation x:layers.values()) {
+            lls.add(new PropertyGraph(x.getName(), this));
+        }
+        return lls;
+    }
+    
+    
+    
+        /**
+     * Remove all the edges in all the layers from source to destination
+     * @param left      Subject's URI (source)
+     * @param right     Object's URI  (destination)
+     */
+    @Override
+    public void removeEdge(String left, String right) {
+        if (left==null || right == null)
+            return;
+        for (String x:layers.keySet()) { 
+            getLayer(x).removeEdge(left, right);
+        }
+    }
+
+    /**
+     * Returns the mean of the weight of all the arcs from source to destination
+     * @param left      Subject's URI (source)
+     * @param right     Object's URI  (destination)
+     * @return 
+     */
+    @Override
+    public double getEdge(String left, String right) {
+        if (left==null || right == null)
+            return 0;
+        double sz = layers.size();
+        if (sz==0)
+            return 0;
+        double counting = 0;
+        
+        Entity el = getVertex(left);
+        Entity er = getVertex(right);
+        if (el==null || er== null)
+            return 0;
+        
+        for (String x:layers.keySet()) {
+            counting += layers.get(x).get(el.getIndex(), er.getIndex());
+        }
+        return (counting / sz);
+    }
+    
+    
+    public double getEdge(Entity src, Entity dst) {
+        return getEdge(src.getClassName(),dst.getClassName());
+    }
+     
+    /**************************************************************************/
+    /**************************************************************************/
+    /**************************************************************************/
+    
+    
+    /**
+     * Creates a new OWL relation
+     * @param subject       Triple's subject (source)
+     * @param predicate     Triple's predicate (link type/Layers)
+     * @param object        Triple's object (destination)
+     * @param val           matrix value (to update). If 0, it removes all the previous links of the same triple
+     */
+    public void addTriple(Entity subject, Relation predicate, Entity object, double val)  {
+        if (val==0) {
+            remTriple(subject,predicate,object);
+        } else if (getTriple(subject,predicate,object)==0) {
+        	//subject.toResource(mod).addProperty(predicate.getProperty(), (RDFNode)object.toResource(mod));
+            Statement statement = mod.createStatement(subject.toResource(mod),predicate.getProperty(),object.toResource(mod));
+            mod.add(statement);
+            predicate.set(subject.getIndex(), object.getIndex(),val);
+            layers.put(predicate.getName(), predicate); //IMPORTANT: update the map
+        }
+    }
+    
+    public boolean hasTriple(Entity subject, Relation predicate, Entity object) {
+        
+        Selector s = AbstractModelQuery.getSelector(this, subject, predicate, object);
+        StmtIterator r= mod.listStatements(s);
+        return ( r.toList().size() > 0);
+        
+    }
+    
+    public boolean hasTriple(int subject, Relation predicate, int object) {
+        Entity src = getVertex(subject);
+        Entity dst = getVertex(object);
+        if (src==null || dst==null) {
+            return false;
+        } else {
+            return hasTriple(src,predicate,dst);
+        }
+    }
+    
+    /**
+     * Returns the weight of the given triple's link
+     * @param subject       Triple's subject (source)
+     * @param predicate     Triple's predicate (link type/Layers)
+     * @param object        Triple's object (destination)
+     * @return 
+     */
+    public double getTriple(Entity subject, Relation predicate, Entity object) {
+        
+        Selector s = AbstractModelQuery.getSelector(this, subject, predicate, object);
+       
+        StmtIterator r= mod.listStatements(s);
+        double size = r.toList().size();
+        if (size ==0)
+            return 0;
+        
+        double counting = 0;
+        
+        for (Statement x:r.toList()) {
+            
+            int sj = getVertex(x.getSubject()).getIndex();
+            int oj = getVertex((Resource)x.getObject()).getIndex();
+            predicate = getRelation(x.getPredicate().getURI());
+            
+            double tmp = predicate.get(sj, oj);
+            if (tmp==0) {
+                try {
+                    predicate.set(sj, oj, 1);
+                } catch (Throwable ex) {
+                    Logger.getLogger(AbstractMultiLayerGraph.class.getName()).log(Level.SEVERE, null, ex);
+                }
+                tmp = 1;
+            }
+            counting += tmp;
+        }
+        return (counting / size);
+    }
+    
+    /**
+     * Removes all the triple entries
+     * @param src       Triple's subject (source)
+     * @param predicate     Triple's predicate (link type/Layers)
+     * @param dst        Triple's object (destination)
+     */
+    public void remTriple(Entity src, Relation prop, Entity dst) {
+        
+        
+        
+        
+        Selector s = new SimpleSelector(src,prop,dst);
+        StmtIterator r= mod.listStatements(s);
+        Collection<Relation> rels;
+        
+        if (prop==null)
+            rels = layers.values();
+        else {
+            rels = new LinkedList<>();        
+            rels.add(prop);
+        }
+        
+        for (Relation x:rels) {
+            PropertyGraph layer = getPropertyGraph(x);
+            if (src==null && dst==null) {
+                layer.clear();
+            } else if (src==null) {
+                LinkedList<Entity> ins = getInSet(dst, prop);
+                for (Entity y : ins) {
+                    x.rem(y.getIndex(), dst.getIndex());
+                }
+            } else if (dst==null) {
+                LinkedList<Entity> ins = getOutSet(src, prop);
+                for (Entity y : ins) {
+                    x.rem(src.getIndex(),y.getIndex());
+                }
+            } else {
+                x.rem(src.getIndex(), dst.getIndex());
+            }
+            layers.put(x.getName(), x);
+        }
+    }
+    
+
+    @Override
+    public IGraph<Entity> rename(String new_name) {
+        return this;
+    }
+
+    @Override @Deprecated
+    public void setVertex(String name, Entity val) {
+        throw new UnsupportedOperationException("Deprecated method.");
+    }
+    
+    @Override @Deprecated
+    public void addVertex(String name, Entity val) {
+        throw new UnsupportedOperationException("Deprecated method.");
+    }
+
+    @Override @Deprecated
+    public boolean addEdge(String left, String right, double value) {
+        throw new UnsupportedOperationException("It has no sense to add an edge with a given value for every possible layer");
+    }
+
+    @Override @Deprecated
+    public boolean addEdge(String left, String right) {
+        throw new UnsupportedOperationException("It has no sense to add an edge with a given value for every possible layer."); //To change body of generated methods, choose Tools | Templates.
+    }
+ 
+   
+}

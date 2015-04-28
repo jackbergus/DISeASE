@@ -1,0 +1,250 @@
+/*
+ * Copyright (C) 2015 vasistas
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+ */
+package org.tweetsmining.model.graph.database.logical;
+
+import disease.datatypes.ConcreteMapIterator;
+import disease.utils.datatypes.Pair;
+import java.util.Collection;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.stream.Collectors;
+import org.tweetsmining.model.graph.PropertyGraph;
+import org.tweetsmining.model.graph.database.Entity;
+import org.tweetsmining.model.graph.database.Relation;
+import org.tweetsmining.model.graph.database.cache.CacheBuilder;
+import org.tweetsmining.model.graph.database.eQuery.entity.AEntityQuery;
+import org.tweetsmining.model.graph.database.eQuery.relation.ARelationQuery;
+
+/**
+ *
+ * @author vasistas
+ */
+public class GraphDBRelationExtractorLayerView implements ERInterfaceViewLayer {
+
+    private ERInterfaceLayer master;
+    private Set<Long> admitted;
+            
+    private Map<String,PropertyGraph> permitted = CacheBuilder.createTmpCacheBuilder();
+    private Map<String,PropertyGraph> removal = CacheBuilder.createTmpCacheBuilder();
+    
+    public static Set<Long> stripEntitiesFromRelations(ERInterfaceLayer master, Collection<Relation> admitted) {
+        Set<Long> toret = new TreeSet<>();
+        toret.addAll(admitted.stream()
+                .map((x)->{return x.getSource();})
+                .collect(Collectors.toSet()));
+        toret.addAll(admitted.stream()
+                        .map((x)->{return x.getDestination();}).collect(Collectors.toSet()));
+        return toret;
+    }
+    
+    public static Map<String,PropertyGraph> initFromRelations
+            (ERInterfaceLayer master, Collection<Relation> admitted) {
+        Map<String,PropertyGraph> toret = new TreeMap<>();
+        admitted.forEach((x) -> {
+            if (!toret.containsKey(x.getName()))
+                toret.put(x.getName(), new PropertyGraph(x.getName()));
+            toret.get(x.getName()).addEdge(master.getEntity(x.getSource()), master.getEntity(x.getDestination()), master.hasRelation(x));
+        });
+        return toret;
+    }
+    
+    public GraphDBRelationExtractorLayerView
+           (ERInterfaceLayer master, 
+            Collection<Relation> admitted) {
+        this.master = master;
+        this.admitted = stripEntitiesFromRelations(master,admitted);
+        this.permitted = initFromRelations(master,admitted);
+    }
+    
+   public GraphDBRelationExtractorLayerView
+            (ERInterfaceLayer master, 
+             Collection<Relation> admitted, 
+             Collection<Entity> admittedE) {
+                
+        this.master = master;
+        this.admitted = stripEntitiesFromRelations(master,admitted);
+        this.admitted.addAll(admittedE
+                .parallelStream()
+                .map((x)->{return x.getIndex();})
+                .collect(Collectors.toSet()));
+        this.permitted = initFromRelations(master,admitted);
+    }
+
+    @Override
+    public Set<Long> getIds() {
+        return this.admitted;
+    }
+
+    @Override
+    public Set<Entity> getEntities() {
+        return this.admitted.stream().map((x)->{return master.getEntity(x);}).collect(Collectors.toSet());
+    }
+
+    @Override
+    public Entity getEntity(long e) {
+        if (admitted.contains(e))
+            return master.getEntity(e);
+        else
+            return null;
+    }
+
+    @Override
+    public int getEntitySize(long i) {
+        if (admitted.contains(i))
+            return master.getEntitySize(i);
+        else
+            return -1;
+    }
+
+    @Override
+    public int getEntitySize(Entity e) {
+        if (admitted.contains(e.getIndex()))
+            return master.getEntitySize(e);
+        else
+            return -1;
+    }
+        
+    @Override
+    public <K> K getEntityArg(Entity e, int pos) {
+        if (admitted.contains(e.getIndex()))
+            return master.getEntityArg(e,pos);
+        else
+            return null;    
+    }
+
+    @Override
+    public void remove(Entity name) {
+        this.admitted.remove(name.getIndex());
+    }
+
+    @Override
+    public ERInterfaceLayer filterExcluded(Collection<Long> d) {
+        return new GraphDBEntityExcludedLayerView(this,d);
+    }
+
+    @Override
+    public ERInterfaceLayer filterPermitted(Collection<Long> d) {
+        return new GraphDBEntityAdmittedLayerView(this,d);
+    }
+
+    @Override
+    public boolean hasEntity(Entity left) {
+        if (admitted.contains(left.getIndex()))
+            return master.hasEntity(left);
+        else
+            return false;    
+    }
+
+    @Override
+    public double hasRelation(Relation rel) {
+        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    }
+
+    @Override
+    public Set<Relation> getRelations() {
+        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    }
+
+    @Override
+    public String getName() {
+        return "View";
+    }
+
+    @Override
+    public Entity getVertex(long name) {
+        return getEntity(name);
+    }
+
+    @Override
+    public void removeVertex(Entity name) {
+        remove(name);
+    }
+
+    @Override
+    public void addEdge(Entity left, Relation r, Entity right, double value) {
+        if (!this.permitted.containsKey(r.getName()))
+            this.permitted.put(r.getName(), new PropertyGraph(r.getName()));
+        this.permitted.get(r.getName()).addEdge(left, right, value);
+    }
+
+    @Override
+    public void addEdge(Entity left, Relation r, Entity right) {
+        if (!this.permitted.containsKey(r.getName()))
+            this.permitted.put(r.getName(), new PropertyGraph(r.getName()));
+        this.permitted.get(r.getName()).addEdge(left, right);
+    }
+
+    @Override
+    public void removeEdge(Entity left, Relation r, Entity right) {
+        if (!this.permitted.containsKey(r.getName()))
+            return;
+        this.permitted.get(r.getName()).rem(left.getIndex(), right.getIndex());
+    }
+
+    @Override
+    public double getEdge(Entity left, Relation r, Entity right) {
+        if (!this.permitted.containsKey(r.getName()))
+            return 0;
+        return this.permitted.get(r.getName()).getEdge(left, right);
+    }
+
+    @Override
+    public void clear() {
+        admitted.clear();
+        this.permitted.clear();
+    }
+
+    @Override
+    public Set<Relation> simpleselect(AEntityQuery src, ARelationQuery rel, AEntityQuery dst) {
+        Set<Relation> toret = new TreeSet<>();
+        for (Pair<String, PropertyGraph> p : new ConcreteMapIterator<>(permitted)) {
+            PropertyGraph tpg = p.getSecond();
+            toret.addAll(tpg.getValueRange().stream()
+                    .filter((x)->{
+                        
+                        long si = (Long)x.getKey(0);
+                        long di = (Long)x.getKey(1);
+                        Entity s = getEntity(si);
+                        Entity d = getEntity(di);
+                        Relation r = new Relation(si,p.getFirst(),di);
+                            //The value is admissible iif it is admitted
+                            if (!admitted.contains(si)&&admitted.contains(di))
+                                return false;
+                            //The value is admissible iif it has not been removed
+                            else if (this.removal.containsKey(p.getFirst())&&(this.removal.get(p.getFirst()).has(si,di)))
+                                return false;
+                            //The value is admissible iif it satisfies the query
+                            else
+                                return (src.prop(s)&&rel.prop(r)&&dst.prop(d));
+                    }).map((x) -> {
+                        long si = (Long)x.getKey(0);
+                        long di = (Long)x.getKey(1);
+                        return new Relation(si,p.getFirst(),di);
+            }).collect(Collectors.toSet()));
+        }
+        return toret;
+    }
+
+    @Override
+    public ERInterfaceLayer getPhisicalMaster() {
+        return this.master.getPhisicalMaster();
+    }
+    
+}
