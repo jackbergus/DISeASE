@@ -12,5 +12,8 @@ You could simply compile by running compile.sh
 
 ### 2. Running the code.
 
-For initialize the system, unzip wholeData.zip in the current folder. Then each time run "run.sh" script for start the software
+Download the compressed dataset from http://jackbergus.alwaysdata.net/disease/, and put it in the main project folder.
 
+Next, unzip wholeData.zip in the current folder. 
+
+Each time run the "run.sh" script for starting the software
