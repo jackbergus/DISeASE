@@ -268,7 +268,7 @@ public class TestPhase {
             if (confidence>0) {
                 confidence = (confidence>=0.85 ? 1 : confidence/0.85);
                 toret.appendResult(confidence, icd);
-                //System.out.println(it.getValue(new ICD9CMCode(icd)) + " ::v2 " + confidence);
+                System.out.println(it.getValue(new ICD9CMCode(icd)) + " is the meaning of code " + icd + " with score " + confidence);
             }
         }
         
