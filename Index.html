@@ -1,0 +1,54 @@
+<html>
+<head>
+<script src="http://code.jquery.com/jquery-1.11.0.js"></script>
+<script src="https://raw.githubusercontent.com/douglascrockford/JSON-js/master/json2.js"></script>
+<script type="text/javascript">
+
+$("document").ready(function(){
+	$("#sub").click(function(e){
+		var tmp = $(".text").val().replace(" ","_");
+		$.ajax({
+			type:'GET',
+			url:'/get',
+			crossDomain: true,
+			data:"request="+tmp,
+			dataType:"json",
+			success: function(data){
+			    	$(".the-return").html("");
+			    	$('<tr>').append(
+					    $('<td>').html("<b>ICD9CM Code</b>"),
+					    $('<td>').html("<b>Description</b>"),
+					    $('<td>').html("<b>Score</b>")
+					).appendTo('.the-return');
+				for (var key in data) {
+				  if (data.hasOwnProperty(key)) {
+				    var item = data[key];
+				    $('<tr>').append(
+					    $('<td>').text(item.code[0]),
+					    $('<td>').text(item.descr[0]),
+					    $('<td>').text(item.score[0])
+					).appendTo('.the-return');
+				  }
+				}
+			},
+			error:function(data){
+			    alert("failure with "+JSON.stringify(data,null,4));
+			    
+			}
+		});
+		e.preventDefault();
+	});	
+});
+
+</script>
+</head>
+<body>
+ 
+<input type="text" name="request" class="text" value="diabete mellito" placeholder="Referto" />
+<input type="button" id="sub" name="submit" value="Submit form"  />
+ 
+<table border="1" class="the-return">
+  
+</div>
+</body>
+</html>

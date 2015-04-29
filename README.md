@@ -17,3 +17,7 @@ Download the compressed dataset from http://jackbergus.alwaysdata.net/disease/, 
 Next, unzip wholeData.zip in the current folder. 
 
 Each time run the "run.sh" script for starting the software
+
+## 3. Web Server
+
+You could even run the code as a web server: change the run.sh main class to "disease.web.Server"
