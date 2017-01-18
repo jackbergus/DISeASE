@@ -1,7 +1,7 @@
 # DISeASE
 ## by Giacomo Bergami and Alexander Pollok
 
-This project provides an implementation of a subset of IBM Watson architecture from scratch.
+This project provides an implementation of a subset of IBM Watson architecture from scratch. [Here](https://www.youtube.com/watch?v=3FWMLVSx58M)'s a short demo.
 
 ### 1. Compiling
 
