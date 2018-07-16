@@ -12,9 +12,7 @@ You could simply compile by running compile.sh
 
 ### 2. Running the code.
 
-Download the compressed dataset from http://jackbergus.alwaysdata.net/disease/, and put it in the main project folder.
-
-Next, unzip wholeData.zip in the current folder. 
+Download the compressed dataset from [here](https://drive.google.com/open?id=0B3tBL-tX2EdQcVlzZHd6cHNXalU), and put it in the main project folder. In particular, unzip wholeData.zip in the current folder. 
 
 Each time run the "run.sh" script for starting the software
 
